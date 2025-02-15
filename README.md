@@ -15,3 +15,14 @@ I have tried this in the past, when GANs were still dominant. But at the time I 
     url     = {https://api.semanticscholar.org/CorpusID:275405495}
 }
 ```
+
+```bibtex
+@article{Fifty2024Restructuring,
+    title   = {Restructuring Vector Quantization with the Rotation Trick},
+    author  = {Christopher Fifty, Ronald G. Junkins, Dennis Duan, Aniketh Iyengar, Jerry W. Liu, Ehsan Amid, Sebastian Thrun, Christopher Ré},
+    journal = {ArXiv},
+    year    = {2024},
+    volume  = {abs/2410.06424},
+    url     = {https://api.semanticscholar.org/CorpusID:273229218}
+}
+```
