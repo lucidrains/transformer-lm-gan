@@ -18,6 +18,28 @@ def exists(v):
 def default(v, d):
     return v if exists(v) else d
 
+# tensor helpers
+
+def gradient_penalty(
+    inputs,
+    output,
+    weight = 10,
+    center = 0.
+):
+    device = inputs.device
+
+    gradients = torch_grad(
+        outputs = output,
+        inputs = inputs,
+        grad_outputs = torch.ones_like(output, device = device),
+        create_graph = True,
+        retain_graph = True,
+        only_inputs = True
+    )[0]
+
+    gradients = rearrange(gradients, 'b -> b (...)')
+    return weight * ((gradients.norm(2, dim = 1) - center) ** 2).mean()
+
 # classes
 
 class Discriminator(Module):
