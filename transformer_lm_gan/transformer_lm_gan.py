@@ -14,6 +14,11 @@ from vector_quantize_pytorch.vector_quantize_pytorch import (
     rotate_to
 )
 
+# einstein notation related
+
+from einx import get_at
+from einops import rearrange
+
 # helper functions
 
 def exists(v):
