@@ -10,6 +10,10 @@ from x_transformers import (
     Encoder
 )
 
+from vector_quantize_pytorch.vector_quantize_pytorch import (
+    rotate_to
+)
+
 # helper functions
 
 def exists(v):
