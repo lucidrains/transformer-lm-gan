@@ -98,6 +98,7 @@ class LanguageModelGenerator(Module):
         self.transformer = TransformerWrapper(
             num_tokens = num_tokens,
             max_seq_len = max_seq_len,
+            tie_embedding = True,
             attn_layers = Decoder(
                 dim = dim,
                 attn_dim_head = dim_head,
