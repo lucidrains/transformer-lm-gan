@@ -18,6 +18,7 @@ from vector_quantize_pytorch.vector_quantize_pytorch import (
 
 from einx import get_at
 from einops import rearrange
+from einops.layers.torch import Rearrange
 
 # helper functions
 
@@ -63,14 +64,17 @@ class Discriminator(Module):
     ):
         super().__init__()
 
-        self.discriminator = TransformerWrapper(
-            num_tokens = num_tokens,
-            max_seq_len = max_seq_len,
-            attn_layers = Encoder(
-                dim = dim,
-                attn_dim_head = dim_head,
-                heads = heads
-            )
+        self.token_emb = nn.Embedding(num_tokens, dim)
+
+        self.transformer = Encoder(
+            dim = dim,
+            attn_dim_head = dim_head,
+            heads = heads
+        )
+
+        self.to_real_fake_pred = nn.Sequential(
+            nn.Linear(dim, 1),
+            Rearrange('... 1 -> ...')
         )
 
     def forward(self, x):
@@ -116,7 +120,12 @@ class GAN(Module):
     ):
         super().__init__()
         self.generator = generator
+
+        # weight tie the token embeddings
+
+        discriminator.token_emb = generator.token_emb
         self.discriminator = discriminator
 
     def forward(self, x):
+
         return x
