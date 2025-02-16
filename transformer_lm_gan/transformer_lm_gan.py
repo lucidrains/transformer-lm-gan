@@ -87,7 +87,10 @@ class Discriminator(Module):
         x
     ):
 
-        tokens = self.token_emb(x)
+        if x.dtype in (torch.int, torch.long):
+            tokens = self.token_emb(x)
+        else:
+            tokens = x
 
         embed = self.transformer(tokens)
 
