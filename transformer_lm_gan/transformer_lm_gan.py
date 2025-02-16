@@ -101,17 +101,38 @@ class LanguageModelGenerator(Module):
             tie_embedding = True,
             attn_layers = Decoder(
                 dim = dim,
+                depth = depth,
                 attn_dim_head = dim_head,
                 heads = heads
             )
         )
 
-    def forward(self, x):
+    def forward(
+        self,
+        x,
+        return_loss = False,
+        return_intermediates = False,
+        cache = None
+    ):
 
-        logits = self.transformer(x)
+        if return_loss:
+            x, labels = x[:, :-1], x[:, 1:]
 
-        return logits
+        logits, intermediates = self.transformer(x, cache = cache, return_intermediates = True)
 
+        if not return_loss:
+            if not return_intermediates:
+                return logits
+
+            return logits, intermediates
+
+        loss = F.cross_entropy(
+            rearrange(logits, 'b n l -> b l n'),
+            labels,
+            ignore_index = -1
+        )
+
+        return loss
 
 class GAN(Module):
     def __init__(

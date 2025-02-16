@@ -36,7 +36,10 @@ Homepage = "https://pypi.org/project/transformer-lm-gan/"
 Repository = "https://github.com/lucidrains/transformer-lm-gan"
 
 [project.optional-dependencies]
-examples = []
+examples = [
+    "tqdm"
+]
+
 test = [
     "pytest"
 ]
