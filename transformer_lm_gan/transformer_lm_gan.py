@@ -69,7 +69,8 @@ class Discriminator(Module):
         dim_head,
         heads,
         max_seq_len,
-        depth
+        depth,
+        gp_weight = 10.
     ):
         super().__init__()
 
@@ -90,9 +91,14 @@ class Discriminator(Module):
             Rearrange('... 1 -> ...')
         )
 
+        # loss related
+
+        self.gp_weight = gp_weight
+
     def forward(
         self,
-        x
+        x,
+        return_gradient_penalty = False
     ):
 
         if x.dtype in (torch.int, torch.long):
@@ -104,7 +110,17 @@ class Discriminator(Module):
 
         real_fake_logit = self.to_real_fake_pred(embed)
 
-        return real_fake_logit
+        if not return_gradient_penalty:
+            return real_fake_logit
+
+        # compute the zero-mean gradient penalty for both reals and fakes
+        # from recent Cornell / Brown paper claiming this fixes GAN stability. we will see..
+
+        assert self.training
+
+        zero_mean_gp = gradient_penalty(tokens, real_fake_logits, gp_weight = self.gp_weight)
+
+        return real_fake_logit, zero_mean_gp
 
 class LanguageModelGenerator(Module):
     def __init__(
