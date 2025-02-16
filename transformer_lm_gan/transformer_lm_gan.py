@@ -18,7 +18,7 @@ from vector_quantize_pytorch.vector_quantize_pytorch import (
 # einstein notation related
 
 from einx import get_at
-from einops import rearrange
+from einops import einsum, rearrange
 from einops.layers.torch import Rearrange, Reduce
 
 # helper functions
@@ -137,14 +137,14 @@ class LanguageModelGenerator(Module):
         self.transformer = TransformerWrapper(
             num_tokens = num_tokens,
             max_seq_len = max_seq_len,
-            tie_embedding = True,
+            return_only_embed = True,
             attn_layers = Decoder(
                 dim = dim,
                 depth = depth,
                 attn_dim_head = dim_head,
                 heads = heads,
                 use_rmsnorm = True,
-                rotary_pos_emb = True
+                rotary_pos_emb = True,
             )
         )
 
@@ -153,13 +153,25 @@ class LanguageModelGenerator(Module):
         x,
         return_loss = False,
         return_intermediates = False,
-        cache = None
+        cache = None,
+        return_only_embed = False
     ):
 
         if return_loss:
             x, labels = x[:, :-1], x[:, 1:]
 
-        logits, intermediates = self.transformer(x, cache = cache, return_intermediates = True)
+        embed, intermediates = self.transformer(
+            x,
+            cache = cache,
+            return_intermediates = True,
+        )
+
+        if return_only_embed:
+            return embed
+
+        token_embed = self.transformer.token_emb.emb
+
+        logits = einsum(embed, token_embed.weight, 'b n d, l d -> b n l')
 
         if not return_loss:
             if not return_intermediates:
