@@ -51,6 +51,14 @@ def gradient_penalty(
     gradients = rearrange(gradients, 'b -> b (...)')
     return weight * ((gradients.norm(2, dim = 1) - center) ** 2).mean()
 
+# hinge gan losses
+
+def generator_hinge_loss(fake):
+    return fake.mean()
+
+def discriminator_hinge_loss(real, fake):
+    return (F.relu(1 + real) + F.relu(1 - fake)).mean()
+
 # classes
 
 class Discriminator(Module):
