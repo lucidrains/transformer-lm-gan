@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+from torch import nn
 from torch.nn import Module, ModuleList
 import torch.nn.functional as F
 
@@ -18,7 +19,7 @@ from vector_quantize_pytorch.vector_quantize_pytorch import (
 
 from einx import get_at
 from einops import rearrange
-from einops.layers.torch import Rearrange
+from einops.layers.torch import Rearrange, Reduce
 
 # helper functions
 
@@ -69,7 +70,10 @@ class Discriminator(Module):
         self.transformer = Encoder(
             dim = dim,
             attn_dim_head = dim_head,
-            heads = heads
+            heads = heads,
+            depth = depth,
+            use_rmsnorm = True,
+            rotary_pos_emb = True
         )
 
         self.to_real_fake_pred = nn.Sequential(
@@ -78,9 +82,14 @@ class Discriminator(Module):
             Rearrange('... 1 -> ...')
         )
 
-    def forward(self, x):
+    def forward(
+        self,
+        x
+    ):
 
-        embed = self.discriminator(x)
+        tokens = self.token_emb(x)
+
+        embed = self.transformer(tokens)
 
         real_fake_logit = self.to_real_fake_pred(embed)
 
@@ -106,7 +115,9 @@ class LanguageModelGenerator(Module):
                 dim = dim,
                 depth = depth,
                 attn_dim_head = dim_head,
-                heads = heads
+                heads = heads,
+                use_rmsnorm = True,
+                rotary_pos_emb = True
             )
         )
 
