@@ -73,15 +73,18 @@ class Discriminator(Module):
         )
 
         self.to_real_fake_pred = nn.Sequential(
+            Reduce('b n d -> b d', 'mean'),
             nn.Linear(dim, 1),
             Rearrange('... 1 -> ...')
         )
 
     def forward(self, x):
 
-        x = self.discriminator(x)
+        embed = self.discriminator(x)
 
-        return x
+        real_fake_logit = self.to_real_fake_pred(embed)
+
+        return real_fake_logit
 
 class LanguageModelGenerator(Module):
     def __init__(
