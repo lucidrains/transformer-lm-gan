@@ -2,8 +2,10 @@ from __future__ import annotations
 import math
 
 import torch
-from torch import nn, cat, stack, Tensor
+from torch import nn, cat, stack, tensor, Tensor
 from torch.nn import Module, ModuleList
+from torch.autograd import grad as torch_grad
+
 import torch.nn.functional as F
 
 from x_transformers import (
@@ -70,7 +72,7 @@ def gradient_penalty(
         only_inputs = True
     )[0]
 
-    gradients = rearrange(gradients, 'b -> b (...)')
+    gradients = rearrange(gradients, 'b ... -> b (...)')
     return weight * ((gradients.norm(2, dim = 1) - center) ** 2).mean()
 
 # hinge gan losses
@@ -140,7 +142,7 @@ class Discriminator(Module):
 
         assert self.training
 
-        zero_mean_gp = gradient_penalty(tokens, real_fake_logits, gp_weight = self.gp_weight)
+        zero_mean_gp = gradient_penalty(tokens, real_fake_logit, weight = self.gp_weight)
 
         return real_fake_logit, zero_mean_gp
 
@@ -264,6 +266,10 @@ class GAN(Module):
         discriminator.token_emb = self.token_emb
         self.discriminator = discriminator
 
+        # loss related
+
+        self.register_buffer('zero', tensor(0.), persistent = False)
+
     def generate_forward(
         self,
         seq,
@@ -289,7 +295,9 @@ class GAN(Module):
         seq,
         generate_kwargs: dict = dict(
             temperature = 1.
-        )
+        ),
+        apply_grad_penalty = True,
+        return_loss_breakdown = False
     ):
         seq_len = seq.shape[-1]
 
@@ -304,12 +312,22 @@ class GAN(Module):
 
         discr_input, packed_shape = pack((real_embed, fake_embed), '* n d')
 
-        real_fake_logits = self.discriminator(discr_input)
+        if apply_grad_penalty:
+            real_fake_logits, zero_mean_gp_loss = self.discriminator(discr_input, return_gradient_penalty = True)
+        else:
+            real_fake_logits = self.discriminator(discr_input)
+            zero_mean_gp_loss = self.zero
 
         real_logits, fake_logits = unpack(real_fake_logits, packed_shape, '*')
 
         discr_loss = discriminator_hinge_loss(real_logits, fake_logits)
-        return discr_loss
+
+        total_loss =  discr_loss + zero_mean_gp_loss
+
+        if not return_loss_breakdown:
+            return total_loss
+
+        return total_loss, (discr_loss, zero_mean_gp_loss)
 
     def forward(self, seq):
         # plain autoregressive loss for generator
