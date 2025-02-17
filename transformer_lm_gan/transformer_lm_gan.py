@@ -248,6 +248,9 @@ class GAN(Module):
         self,
         generator: LanguageModelGenerator | dict,
         discriminator: Discriminator | dict,
+        learning_rate = 2e-4,
+        optimizer_klass = AdoptAtan2,
+        optimizer_kwargs: dict = dict()
     ):
         super().__init__()
 
@@ -265,6 +268,12 @@ class GAN(Module):
 
         discriminator.token_emb = self.token_emb
         self.discriminator = discriminator
+
+        # optimizers
+
+        self.generator_optim = optimizer_klass(self.generator.parameters(), lr = learning_rate, **optimizer_kwargs)
+
+        self.discriminator_optim = optimizer_klass(self.generator.parameters(), lr = learning_rate, **optimizer_kwargs)
 
         # loss related
 
