@@ -207,7 +207,7 @@ class LanguageModelGenerator(Module):
     ):
         token_embed = self.transformer.token_emb
 
-        if return_loss or rotate_embed_to_next_for_discr:
+        if return_ar_loss or rotate_embed_to_next_for_discr:
             x, labels = x[:, :-1], x[:, 1:]
 
         embed, intermediates = self.transformer(
@@ -250,7 +250,7 @@ class GAN(Module):
 
         # weight tie the token embeddings
 
-        discriminator.token_emb = generator.token_emb
+        discriminator.token_emb = generator.transformer.token_emb
         self.discriminator = discriminator
 
     def forward(self, x):
