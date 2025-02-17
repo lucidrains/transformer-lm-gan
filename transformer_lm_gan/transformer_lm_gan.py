@@ -199,13 +199,15 @@ class LanguageModelGenerator(Module):
     def forward(
         self,
         x,
-        return_loss = False,
+        return_ar_loss = False,
         return_intermediates = False,
         cache = None,
-        return_only_embed = False
+        return_only_embed = False,
+        rotate_embed_to_next_for_discr = False
     ):
+        token_embed = self.transformer.token_emb
 
-        if return_loss:
+        if return_loss or rotate_embed_to_next_for_discr:
             x, labels = x[:, :-1], x[:, 1:]
 
         embed, intermediates = self.transformer(
@@ -214,14 +216,16 @@ class LanguageModelGenerator(Module):
             return_intermediates = True,
         )
 
+        if rotate_embed_to_next_for_discr:
+            label_embed = token_embed(labels)
+            return rotate_to(embed, label_embed) # same rotation trick Fifty et al applied for VQ in lieu of straight through
+
         if return_only_embed:
             return embed
 
-        token_embed = self.transformer.token_emb.emb
+        logits = einsum(embed, token_embed.emb.weight, 'b n d, l d -> b n l')
 
-        logits = einsum(embed, token_embed.weight, 'b n d, l d -> b n l')
-
-        if not return_loss:
+        if not return_ar_loss:
             if not return_intermediates:
                 return logits
 
@@ -239,7 +243,7 @@ class GAN(Module):
     def __init__(
         self,
         generator: LanguageModelGenerator,
-        discriminator: Discriminator
+        discriminator: Discriminator,
     ):
         super().__init__()
         self.generator = generator
