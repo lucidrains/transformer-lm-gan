@@ -264,8 +264,25 @@ class GAN(Module):
         discriminator.token_emb = self.token_emb
         self.discriminator = discriminator
 
-    def generate_forward(self, seq):
-        raise NotImplementedError
+    def generate_forward(
+        self,
+        seq,
+        generate_kwargs: dict = dict()
+    ):
+        seq_len = seq.shape[-1]
+
+        prompt = seq[:, :(seq_len // 2)]
+
+        response = self.generator.generate(prompt, seq_len, **generate_kwargs)
+
+        generated = cat((prompt, response), dim = -1)
+
+        discr_input = self.generator(generated, rotate_embed_to_next_for_discr = True)
+
+        logits = self.discriminator(discr_input)
+
+        loss = generator_hinge_loss(logits)
+        return loss
 
     def discriminate_forward(
         self,
