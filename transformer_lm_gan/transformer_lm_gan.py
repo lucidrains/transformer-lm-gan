@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 
 import torch
-from torch import nn, Tensor
+from torch import nn, cat, stack, Tensor
 from torch.nn import Module, ModuleList
 import torch.nn.functional as F
 
@@ -16,10 +16,12 @@ from vector_quantize_pytorch.vector_quantize_pytorch import (
     rotate_to
 )
 
+from adam_atan2_pytorch import AdoptAtan2
+
 # einstein notation related
 
 from einx import get_at
-from einops import einsum, rearrange
+from einops import einsum, rearrange, pack, unpack
 from einops.layers.torch import Rearrange, Reduce
 
 # helper functions
@@ -242,17 +244,57 @@ class LanguageModelGenerator(Module):
 class GAN(Module):
     def __init__(
         self,
-        generator: LanguageModelGenerator,
-        discriminator: Discriminator,
+        generator: LanguageModelGenerator | dict,
+        discriminator: Discriminator | dict,
     ):
         super().__init__()
+
+        if isinstance(generator, dict):
+            generator = LanguageModelGenerator(**generator)
+
+        if isinstance(discriminator, dict):
+            discriminator = Discriminator(**discriminator)
+
         self.generator = generator
 
         # weight tie the token embeddings
 
-        discriminator.token_emb = generator.transformer.token_emb
+        self.token_emb = generator.transformer.token_emb
+
+        discriminator.token_emb = self.token_emb
         self.discriminator = discriminator
 
-    def forward(self, x):
+    def generate_forward(self, seq):
+        raise NotImplementedError
 
-        return x
+    def discriminate_forward(
+        self,
+        seq,
+        generate_kwargs: dict = dict(
+            temperature = 1.
+        )
+    ):
+        seq_len = seq.shape[-1]
+
+        real = seq
+
+        prompt = seq[:, :(seq_len // 2)]
+        response = self.generator.generate(prompt, seq_len, **generate_kwargs)
+        fake = cat((prompt, response), dim = -1)
+
+        real_embed = self.token_emb(real[:, :-1])
+        fake_embed = self.generator(fake, rotate_embed_to_next_for_discr = True)
+
+        discr_input, packed_shape = pack((real_embed, fake_embed), '* n d')
+
+        real_fake_logits = self.discriminator(discr_input)
+
+        real_logits, fake_logits = unpack(real_fake_logits, packed_shape, '*')
+
+        discr_loss = discriminator_hinge_loss(real_logits, fake_logits)
+        return discr_loss
+
+    def forward(self, seq):
+        # plain autoregressive loss for generator
+
+        return self.generator(seq, return_ar_loss = True)

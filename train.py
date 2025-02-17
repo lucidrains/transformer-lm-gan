@@ -115,7 +115,7 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
 
         (loss / GRAD_ACCUM_EVERY).backward()
 
-    print(f"training loss: {loss.item():.3f}")
+    print(f"generator ar train loss: {loss.item():.4f}")
 
     torch.nn.utils.clip_grad_norm_(gan.generator.parameters(), 0.5)
 
@@ -128,7 +128,7 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
             valid_data = next(val_loader)
 
             loss = gan.generator(valid_data, return_ar_loss = True)
-            print(f"validation loss: {loss.item():.4f}")
+            print(f"generator ar valid loss: {loss.item():.4f}")
 
     if i % GENERATE_EVERY == 0:
         gan.eval()
