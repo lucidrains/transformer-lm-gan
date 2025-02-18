@@ -179,7 +179,8 @@ class LanguageModelGenerator(Module):
         seq_len: int,
         temperature = 1.,
         filter_thres = 0.9,
-        cache_kv = True
+        cache_kv = True,
+        return_with_prompt = True
     ):
         prompt_seq_len, out = prompt.shape[-1], prompt.clone()
         sample_num_times = max(0, seq_len - prompt_seq_len)
@@ -198,7 +199,10 @@ class LanguageModelGenerator(Module):
 
             out = torch.cat((out, sample), dim = -1)
 
-        return out[..., prompt_seq_len:]
+        if not return_with_prompt:
+            out = out[..., prompt_seq_len:]
+
+        return out
 
     def forward(
         self,
@@ -288,9 +292,7 @@ class GAN(Module):
 
         prompt = seq[:, :(seq_len // 2)]
 
-        response = self.generator.generate(prompt, seq_len, **generate_kwargs)
-
-        generated = cat((prompt, response), dim = -1)
+        generated = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
         discr_input = self.generator(generated, rotate_embed_to_next_for_discr = True)
 
@@ -313,8 +315,7 @@ class GAN(Module):
         real = seq
 
         prompt = seq[:, :(seq_len // 2)]
-        response = self.generator.generate(prompt, seq_len, **generate_kwargs)
-        fake = cat((prompt, response), dim = -1)
+        fake = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
         real_embed = self.token_emb(real[:, :-1])
         fake_embed = self.generator(fake, rotate_embed_to_next_for_discr = True)
