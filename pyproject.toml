@@ -1,6 +1,6 @@
 [project]
 name = "transformer-lm-gan"
-version = "0.0.1"
+version = "0.0.2"
 description = "Explorations into Transformer Language Model with Adversarial Loss"
 authors = [
     { name = "Phil Wang", email = "lucidrains@gmail.com" }
