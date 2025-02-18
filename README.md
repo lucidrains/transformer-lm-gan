@@ -17,6 +17,7 @@ from transformer_lm_gan import (
 )
 
 gan = GAN(
+    strategy = 'gumbel_one_hot', # or 'rotate' for rotation trick, may try combination of two if both fails in experiments
     generator = dict(
         num_tokens = 256,
         dim = 512,
