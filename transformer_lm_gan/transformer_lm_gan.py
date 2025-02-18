@@ -40,11 +40,8 @@ def log(t, eps = 1e-20):
     return torch.log(t.clamp(min = eps))
 
 def gumbel_noise(t):
-    noise = torch.zeros_like(t).uniform_(0, 1)
+    noise = torch.rand_like(t)
     return -log(-log(noise))
-
-def gumbel_sample(t, temperature = 1., dim = -1, keepdim = True):
-    return ((t / max(temperature, 1e-10)) + gumbel_noise(t)).argmax(dim = dim, keepdim = keepdim)
 
 def top_k(logits, thres = 0.9):
     k = math.ceil((1 - thres) * logits.shape[-1])
@@ -180,12 +177,15 @@ class LanguageModelGenerator(Module):
         temperature = 1.,
         filter_thres = 0.9,
         cache_kv = True,
-        return_with_prompt = True
+        return_with_prompt = True,
+        eps = 1e-10
     ):
         prompt_seq_len, out = prompt.shape[-1], prompt.clone()
         sample_num_times = max(0, seq_len - prompt_seq_len)
 
         cache = None
+
+        gumbel_noises = []
 
         for _ in range(sample_num_times):
             logits, next_cache = self.forward(out, return_intermediates = True, cache = cache)
@@ -195,14 +195,23 @@ class LanguageModelGenerator(Module):
                 cache = next_cache
 
             logits = top_k(logits, thres = filter_thres)
-            sample = gumbel_sample(logits, temperature = temperature, dim = -1)
+
+            logits = logits / max(temperature, eps)
+
+            noise = gumbel_noise(logits)
+
+            gumbel_noises.append(noise)
+
+            logits = logits + noise
+
+            sample = logits.argmax(dim = -1, keepdim = True)
 
             out = torch.cat((out, sample), dim = -1)
 
         if not return_with_prompt:
             out = out[..., prompt_seq_len:]
 
-        return out
+        return out, (filter_thres, temperature, stack(gumbel_noises))
 
     def forward(
         self,
@@ -292,7 +301,7 @@ class GAN(Module):
 
         prompt = seq[:, :(seq_len // 2)]
 
-        generated = self.generator.generate(prompt, seq_len, **generate_kwargs)
+        generated, sampling_hparams = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
         discr_input = self.generator(generated, rotate_embed_to_next_for_discr = True)
 
@@ -315,7 +324,7 @@ class GAN(Module):
         real = seq
 
         prompt = seq[:, :(seq_len // 2)]
-        fake = self.generator.generate(prompt, seq_len, **generate_kwargs)
+        fake, sampling_hparams = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
         real_embed = self.token_emb(real[:, :-1])
         fake_embed = self.generator(fake, rotate_embed_to_next_for_discr = True)
