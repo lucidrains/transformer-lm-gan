@@ -26,6 +26,10 @@ from einx import get_at
 from einops import einsum, rearrange, pack, unpack
 from einops.layers.torch import Rearrange, Reduce
 
+# progress bar
+
+from tqdm import tqdm
+
 # helper functions
 
 def exists(v):
@@ -175,6 +179,7 @@ class LanguageModelGenerator(Module):
         prompt: Tensor,
         seq_len: int,
         temperature = 1.,
+        filter_fn = top_k,
         filter_thres = 0.9,
         cache_kv = True,
         return_with_prompt = True,
@@ -187,14 +192,14 @@ class LanguageModelGenerator(Module):
 
         gumbel_noises = []
 
-        for _ in range(sample_num_times):
+        for _ in tqdm(range(sample_num_times)):
             logits, next_cache = self.forward(out, return_intermediates = True, cache = cache)
             logits = logits[:, -1]
 
             if cache_kv:
                 cache = next_cache
 
-            logits = top_k(logits, thres = filter_thres)
+            logits = filter_fn(logits, thres = filter_thres)
 
             logits = logits / max(temperature, eps)
 
@@ -211,7 +216,7 @@ class LanguageModelGenerator(Module):
         if not return_with_prompt:
             out = out[..., prompt_seq_len:]
 
-        return out, (filter_thres, temperature, stack(gumbel_noises))
+        return out, (filter_fn, filter_thres, temperature, stack(gumbel_noises))
 
     def forward(
         self,
@@ -220,11 +225,10 @@ class LanguageModelGenerator(Module):
         return_intermediates = False,
         cache = None,
         return_only_embed = False,
-        rotate_embed_to_next_for_discr = False
     ):
         token_embed = self.transformer.token_emb
 
-        if return_ar_loss or rotate_embed_to_next_for_discr:
+        if return_ar_loss:
             x, labels = x[:, :-1], x[:, 1:]
 
         embed, intermediates = self.transformer(
@@ -232,10 +236,6 @@ class LanguageModelGenerator(Module):
             cache = cache,
             return_intermediates = True,
         )
-
-        if rotate_embed_to_next_for_discr:
-            label_embed = token_embed(labels)
-            return rotate_to(embed, label_embed) # same rotation trick Fifty et al applied for VQ in lieu of straight through
 
         if return_only_embed:
             return embed
@@ -263,7 +263,8 @@ class GAN(Module):
         discriminator: Discriminator | dict,
         learning_rate = 2e-4,
         optimizer_klass = AdoptAtan2,
-        optimizer_kwargs: dict = dict()
+        optimizer_kwargs: dict = dict(),
+        strategy: Literal['gumbel_one_hot', 'rotate'] = 'rotate'
     ):
         super().__init__()
 
@@ -288,6 +289,10 @@ class GAN(Module):
 
         self.discriminator_optim = optimizer_klass(self.discriminator.parameters(), lr = learning_rate, **optimizer_kwargs)
 
+        # differentiating through the discrete strategy
+
+        self.strategy = strategy
+
         # loss related
 
         self.register_buffer('zero', tensor(0.), persistent = False)
@@ -303,9 +308,13 @@ class GAN(Module):
 
         generated, sampling_hparams = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
-        discr_input = self.generator(generated, rotate_embed_to_next_for_discr = True)
+        embed = self.generator(generated, return_only_embed = True)
 
-        logits = self.discriminator(discr_input)
+        if self.strategy == 'rotate':
+            next_embeds = self.token_emb(generated[:, 1:])
+            embed = rotate_to(embed[:, :-1], next_embeds)
+
+        logits = self.discriminator(embed)
 
         loss = generator_hinge_loss(logits)
         return loss
@@ -327,7 +336,11 @@ class GAN(Module):
         fake, sampling_hparams = self.generator.generate(prompt, seq_len, **generate_kwargs)
 
         real_embed = self.token_emb(real[:, :-1])
-        fake_embed = self.generator(fake, rotate_embed_to_next_for_discr = True)
+        fake_embed = self.generator(fake, return_only_embed = True)
+
+        if self.strategy == 'rotate':
+            fake_next_embeds = self.token_emb(fake[:, 1:])
+            fake_embed = rotate_to(fake_embed[:, :-1], fake_next_embeds)
 
         discr_input, packed_shape = pack((real_embed, fake_embed), '* n d')
 
