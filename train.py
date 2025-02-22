@@ -35,9 +35,9 @@ ADVERSARIAL = True
 AUTOREGRESSIVE = True
 
 AUTOREGRESSIVE_EVERY = 1
-ADVERSARIAL_EVERY = 4
+ADVERSARIAL_EVERY = 1
 ADVERSARIAL_AFTER = 500
-STRATEGY = 'rotate'
+STRATEGY = 'gumbel_one_hot'
 
 # STRATEGY = 'gumbel_one_hot'
 
@@ -76,7 +76,7 @@ gan = GAN(
     discriminator = dict(
         num_tokens = 256,
         dim = 512,
-        depth = 2,
+        depth = 4,
         dim_head = 64,
         heads = 8,
         max_seq_len = SEQ_LEN

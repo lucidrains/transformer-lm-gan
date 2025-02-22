@@ -263,6 +263,7 @@ class GAN(Module):
         generator: LanguageModelGenerator | dict,
         discriminator: Discriminator | dict,
         learning_rate = 2e-4,
+        discr_learning_rate_mult = 2.,
         optimizer_klass = AdoptAtan2,
         optimizer_kwargs: dict = dict(),
         strategy: Literal['gumbel_one_hot', 'rotate'] = 'rotate'
@@ -290,7 +291,7 @@ class GAN(Module):
 
         self.generator_optim = optimizer_klass(self.generator.parameters(), lr = learning_rate, **optimizer_kwargs)
 
-        self.discriminator_optim = optimizer_klass(self.discriminator.parameters(), lr = learning_rate, **optimizer_kwargs)
+        self.discriminator_optim = optimizer_klass(self.discriminator.parameters(), lr = learning_rate * discr_learning_rate_mult, **optimizer_kwargs)
 
         # differentiating through the discrete strategy
 
