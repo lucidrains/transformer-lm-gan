@@ -34,6 +34,9 @@ APPLY_GRAD_PENALTY_EVERY = 4 # only do zero mean gp every number of steps, for e
 ADVERSARIAL = True
 AUTOREGRESSIVE = False
 
+STRATEGY = 'rotate'
+# STRATEGY = 'gumbel_one_hot'
+
 assert ADVERSARIAL or AUTOREGRESSIVE
 
 # helpers
@@ -73,7 +76,8 @@ gan = GAN(
         dim_head = 64,
         heads = 8,
         max_seq_len = SEQ_LEN
-    )
+    ),
+    strategy = STRATEGY
 ).cuda()
 
 # prepare enwik8 data
