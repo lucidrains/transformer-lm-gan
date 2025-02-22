@@ -6,7 +6,7 @@ import numpy as np
 
 import torch
 from torch.optim import Adam
-from torch import Tensor
+from torch import Tensor, tensor
 from torch.utils.data import DataLoader, Dataset
 
 from transformer_lm_gan.transformer_lm_gan import (
@@ -18,21 +18,31 @@ from transformer_lm_gan.transformer_lm_gan import (
 # constants
 
 NUM_BATCHES = int(1e5)
-BATCH_SIZE = 4
-GRAD_ACCUM_EVERY = 4
+BATCH_SIZE = 16
+GRAD_ACCUM_EVERY = 1
 LEARNING_RATE = 1e-4
 VALIDATE_EVERY = 100
-PRIME_LENGTH = 128
+PRIME_LENGTH = 32
 GENERATE_EVERY = 500
-GENERATE_LENGTH = 512
-SEQ_LEN = 512
+GENERATE_LENGTH = 128
+SEQ_LEN = 128
 
 APPLY_GRAD_PENALTY_EVERY = 4 # only do zero mean gp every number of steps, for efficiency, proven out by Karras et al since Stylegan2
+
+# training
+
+ADVERSARIAL = True
+AUTOREGRESSIVE = False
+
+assert ADVERSARIAL or AUTOREGRESSIVE
 
 # helpers
 
 def exists(v):
     return v is not None
+
+def divisible_by(num, den):
+    return (num % den) == 0
 
 def cycle(loader):
     while True:
@@ -47,27 +57,23 @@ def decode_tokens(tokens):
 
 # the language model generator
 
-generator = LanguageModelGenerator(
-    num_tokens = 256,
-    dim = 512,
-    depth = 6,
-    dim_head = 64,
-    heads = 8,
-    max_seq_len = SEQ_LEN
-).cuda()
-
-discr = Discriminator(
-    num_tokens = 256,
-    dim = 512,
-    depth = 2,
-    dim_head = 64,
-    heads = 9,
-    max_seq_len = SEQ_LEN
-)
-
 gan = GAN(
-    generator = generator,
-    discriminator = discr
+    generator = dict(
+        num_tokens = 256,
+        dim = 512,
+        depth = 6,
+        dim_head = 64,
+        heads = 8,
+        max_seq_len = SEQ_LEN
+    ),
+    discriminator = dict(
+        num_tokens = 256,
+        dim = 512,
+        depth = 2,
+        dim_head = 64,
+        heads = 8,
+        max_seq_len = SEQ_LEN
+    )
 ).cuda()
 
 # prepare enwik8 data
@@ -98,39 +104,75 @@ val_loader = DataLoader(val_dataset, batch_size = BATCH_SIZE)
 
 # optimizer
 
-optim = Adam(gan.generator.parameters(), lr = LEARNING_RATE)
-
 train_loader = cycle(train_loader)
 val_loader = cycle(val_loader)
 
 # training
 
+last_gp_loss = tensor(0.)
+
 for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
     gan.train()
 
-    for _ in range(GRAD_ACCUM_EVERY):
-        data = next(train_loader)
+    if ADVERSARIAL:
+        apply_grad_penalty = divisible_by(i, APPLY_GRAD_PENALTY_EVERY)
 
-        loss = gan.generator(data, return_ar_loss = True)
+        gan.discriminator_optim.zero_grad()
 
-        (loss / GRAD_ACCUM_EVERY).backward()
+        for _ in range(GRAD_ACCUM_EVERY):
+            data = next(train_loader)
 
-    print(f"generator ar train loss: {loss.item():.4f}")
+            loss, (hinge_loss, gp_loss) = gan.discriminate_forward(
+                data,
+                return_loss_breakdown = True,
+                apply_grad_penalty = apply_grad_penalty
+            )
 
-    torch.nn.utils.clip_grad_norm_(gan.generator.parameters(), 0.5)
+            (loss / GRAD_ACCUM_EVERY).backward()
 
-    optim.step()
-    optim.zero_grad()
+            if apply_grad_penalty:
+                last_gp_loss = gp_loss
 
-    if i % VALIDATE_EVERY == 0:
+        gan.discriminator_optim.step()
+
+        gan.generator_optim.zero_grad()
+
+        for _ in range(GRAD_ACCUM_EVERY):
+            data = next(train_loader)
+
+            gen_loss = gan.generate_forward(data)
+
+            (gen_loss / GRAD_ACCUM_EVERY).backward()
+
+        gan.generator_optim.step()
+
+        print(f"discr: {hinge_loss.item():.4f} | gen: {gen_loss.item():.4f} | gp: {last_gp_loss.item():.4f}")
+
+    if AUTOREGRESSIVE:
+        gan.generator_optim.zero_grad()
+
+        for _ in range(GRAD_ACCUM_EVERY):
+            data = next(train_loader)
+
+            loss = gan.generator(data, return_ar_loss = True)
+
+            (loss / GRAD_ACCUM_EVERY).backward()
+
+        print(f"ar train loss: {loss.item():.4f}")
+
+        torch.nn.utils.clip_grad_norm_(gan.generator.parameters(), 0.5)
+
+        gan.generator_optim.step()
+
+    if divisible_by(i, VALIDATE_EVERY):
         gan.eval()
         with torch.no_grad():
             valid_data = next(val_loader)
 
             loss = gan.generator(valid_data, return_ar_loss = True)
-            print(f"generator ar valid loss: {loss.item():.4f}")
+            print(f"ar valid loss: {loss.item():.4f}")
 
-    if i % GENERATE_EVERY == 0:
+    if divisible_by(i, GENERATE_EVERY):
         gan.eval()
 
         inp = random.choice(val_dataset)[:PRIME_LENGTH]
@@ -143,7 +185,7 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
 
         prompt = inp[None, ...]
 
-        sampled = gan.generator.generate(prompt, GENERATE_LENGTH)
+        sampled, _ = gan.generator.generate(prompt, GENERATE_LENGTH, progress_bar = True)
 
         base_decode_output = decode_tokens(sampled[0])
 

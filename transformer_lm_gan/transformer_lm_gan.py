@@ -183,7 +183,8 @@ class LanguageModelGenerator(Module):
         filter_thres = 0.9,
         cache_kv = True,
         return_with_prompt = True,
-        eps = 1e-10
+        eps = 1e-10,
+        progress_bar = False
     ):
         prompt_seq_len, out = prompt.shape[-1], prompt.clone()
         sample_num_times = max(0, seq_len - prompt_seq_len)
@@ -192,7 +193,7 @@ class LanguageModelGenerator(Module):
 
         gumbel_noises = []
 
-        for _ in tqdm(range(sample_num_times)):
+        for _ in tqdm(range(sample_num_times), disable = not progress_bar):
             logits, next_cache = self.forward(out, return_intermediates = True, cache = cache)
             logits = logits[:, -1]
 
@@ -304,7 +305,7 @@ class GAN(Module):
     ):
         seq_len = seq.shape[-1]
 
-        prompt = seq[:, :(seq_len // 2)]
+        prompt = seq[:, :(seq_len // 4)]
 
         prompt_len = prompt.shape[-1]
         prompt_embed = self.token_emb(prompt[:, :-1])
@@ -362,7 +363,7 @@ class GAN(Module):
 
         real = seq
 
-        prompt = seq[:, :(seq_len // 2)]
+        prompt = seq[:, :(seq_len // 4)]
 
         prompt_len = prompt.shape[-1]
         prompt_embed = self.token_emb(prompt[:, :-1])
