@@ -286,6 +286,8 @@ class GAN(Module):
 
         # optimizers
 
+        self.ar_generator_optim = optimizer_klass(self.generator.parameters(), lr = learning_rate, **optimizer_kwargs)
+
         self.generator_optim = optimizer_klass(self.generator.parameters(), lr = learning_rate, **optimizer_kwargs)
 
         self.discriminator_optim = optimizer_klass(self.discriminator.parameters(), lr = learning_rate, **optimizer_kwargs)

@@ -32,9 +32,13 @@ APPLY_GRAD_PENALTY_EVERY = 4 # only do zero mean gp every number of steps, for e
 # training
 
 ADVERSARIAL = True
-AUTOREGRESSIVE = False
+AUTOREGRESSIVE = True
 
+AUTOREGRESSIVE_EVERY = 1
+ADVERSARIAL_EVERY = 4
+ADVERSARIAL_AFTER = 500
 STRATEGY = 'rotate'
+
 # STRATEGY = 'gumbel_one_hot'
 
 assert ADVERSARIAL or AUTOREGRESSIVE
@@ -118,8 +122,12 @@ last_gp_loss = tensor(0.)
 for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
     gan.train()
 
-    if ADVERSARIAL:
-        apply_grad_penalty = divisible_by(i, APPLY_GRAD_PENALTY_EVERY)
+    if (
+        ADVERSARIAL and
+        divisible_by(i, ADVERSARIAL_EVERY) and
+        i > ADVERSARIAL_AFTER
+    ):
+        apply_grad_penalty = divisible_by(i // ADVERSARIAL_EVERY, APPLY_GRAD_PENALTY_EVERY)
 
         gan.discriminator_optim.zero_grad()
 
@@ -152,8 +160,8 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
 
         print(f"discr: {hinge_loss.item():.4f} | gen: {gen_loss.item():.4f} | gp: {last_gp_loss.item():.4f}")
 
-    if AUTOREGRESSIVE:
-        gan.generator_optim.zero_grad()
+    if AUTOREGRESSIVE and divisible_by(i, AUTOREGRESSIVE_EVERY):
+        gan.ar_generator_optim.zero_grad()
 
         for _ in range(GRAD_ACCUM_EVERY):
             data = next(train_loader)
@@ -166,7 +174,7 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10.0, desc = "training"):
 
         torch.nn.utils.clip_grad_norm_(gan.generator.parameters(), 0.5)
 
-        gan.generator_optim.step()
+        gan.ar_generator_optim.step()
 
     if divisible_by(i, VALIDATE_EVERY):
         gan.eval()
