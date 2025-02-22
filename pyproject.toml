@@ -27,6 +27,7 @@ dependencies = [
     "adam-atan2-pytorch>=0.1.18",
     "einx>=0.3.0",
     "einops>=0.8.0",
+    "mlm-pytorch",
     "torch>=2.0",
     "x-transformers>=2.0.0",
     "vector-quantize-pytorch>=1.21.8",
